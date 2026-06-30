@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Gráficas X/Y · Micro-PWA</title>
+  <meta name="theme-color" content="#1d4ed8" />
+
+  <script>
+    /*
+      Manifest dinámico: evita archivos externos.
+      En un despliegue real también podrías separar manifest.webmanifest,
+      pero aquí se mantiene todo en un único index.html.
+    */
+    const manifest = {
+      name: "Gráficas X/Y · Tecnología ESO",
+      short_name: "GraficasXY",
+      start_url: ".",
+      display: "standalone",
+      background_color: "#f8fafc",
+      theme_color: "#1d4ed8",
+      icons: [
+        {
+          src: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 128 128'%3E%3Crect width='128' height='128' rx='24' fill='%231d4ed8'/%3E%3Cpath d='M20 100h88M24 92c16-44 32-64 48-60 12 3 18 24 32 36' fill='none' stroke='white' stroke-width='8' stroke-linecap='round'/%3E%3C/svg%3E",
+          sizes: "128x128",
+          type: "image/svg+xml"
+        }
+      ]
+    };
+    const manifestBlob = new Blob([JSON.stringify(manifest)], { type: "application/manifest+json" });
+    const manifestURL = URL.createObjectURL(manifestBlob);
+    document.write(`<link rel="manifest" href="${manifestURL}">`);
+  </script>
+
+  <style>
+    :root {
+      --bg: #f8fafc;
+      --panel: #ffffff;
+      --ink: #0f172a;
+      --muted: #64748b;
+      --primary: #1d4ed8;
+      --primary-soft: #dbeafe;
+      --border: #dbe3ef;
+      --danger: #b91c1c;
+      --radius: 18px;
+      --shadow: 0 12px 30px rgba(15, 23, 42, 0.10);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--ink);
+    }
+
+    header {
+      padding: 18px 16px 10px;
+      background: linear-gradient(135deg, #1d4ed8, #0f172a);
+      color: white;
+    }
+
+    header h1 {
+      margin: 0;
+      font-size: clamp(1.4rem, 5vw, 2.1rem);
+      line-height: 1.1;
+    }
+
+    header p {
+      margin: 8px 0 0;
+      color: #dbeafe;
+      font-size: 0.95rem;
+    }
+
+    main {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 16px;
+      display: grid;
+      gap: 16px;
+    }
+
+    .layout {
+      display: grid;
+      gap: 16px;
+    }
+
+    @media (min-width: 900px) {
+      .layout {
+        grid-template-columns: 340px 1fr;
+        align-items: start;
+      }
+    }
+
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 16px;
+    }
+
+    .controls {
+      display: grid;
+      gap: 14px;
+    }
+
+    label {
+      display: grid;
+      gap: 6px;
+      font-size: 0.92rem;
+      color: var(--muted);
+    }
+
+    select,
+    input[type="range"],
+    button {
+      width: 100%;
+    }
+
+    select,
+    button {
+      min-height: 44px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      font: inherit;
+    }
+
+    select {
+      background: white;
+      padding: 0 12px;
+      color: var(--ink);
+    }
+
+    button {
+      background: var(--primary);
+      color: white;
+      border: none;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    button.secondary {
+      background: var(--primary-soft);
+      color: var(--primary);
+    }
+
+    .value {
+      font-weight: 700;
+      color: var(--ink);
+    }
+
+    .formula {
+      background: #f1f5f9;
+      border-radius: 14px;
+      padding: 12px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 0.95rem;
+      overflow-x: auto;
+    }
+
+    .canvas-wrap {
+      position: relative;
+      min-height: 440px;
+    }
+
+    canvas {
+      width: 100%;
+      height: min(68vh, 620px);
+      display: block;
+      border-radius: var(--radius);
+      background: white;
+      border: 1px solid var(--border);
+      touch-action: none;
+    }
+
+    .hint {
+      font-size: 0.88rem;
+      color: var(--muted);
+      line-height: 1.45;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 9px;
+      border-radius: 999px;
+      background: var(--primary-soft);
+      color: var(--primary);
+      font-size: 0.82rem;
+      font-weight: 700;
+    }
+  </style>
+</head>
+
+<body>
+  <header>
+    <h1>Gráficas X/Y · Cinemática y funciones</h1>
+    <p>Visualizador Canvas para funciones lineales y cuadráticas aplicadas a Tecnología ESO.</p>
+  </header>
+
+  <main>
+    <section class="layout">
+      <aside class="card controls" aria-label="Controles de la gráfica">
+        <span class="pill">Micro-PWA offline</span>
+
+        <label>
+          Tipo de función
+          <select id="type">
+            <option value="linear">Lineal: y = m·x + b</option>
+            <option value="quadratic">Cuadrática: y = a·x² + b·x + c</option>
+          </select>
+        </label>
+
+        <label>
+          Pendiente m / coeficiente b
+          <input id="m" type="range" min="-5" max="5" step="0.1" value="1.5" />
+          <span class="value" id="mVal">1.5</span>
+        </label>
+
+        <label>
+          Ordenada b / coeficiente c
+          <input id="b" type="range" min="-10" max="10" step="0.1" value="0" />
+          <span class="value" id="bVal">0</span>
+        </label>
+
+        <label id="aGroup">
+          Coeficiente a
+          <input id="a" type="range" min="-2" max="2" step="0.05" value="0.25" />
+          <span class="value" id="aVal">0.25</span>
+        </label>
+
+        <label>
+          Zoom
+          <input id="zoom" type="range" min="20" max="80" step="1" value="42" />
+          <span class="value" id="zoomVal">42 px/u</span>
+        </label>
+
+        <div class="formula" id="formula"></div>
+
+        <button id="reset" class="secondary">Restablecer vista</button>
+
+        <p class="hint">
+          Arrastra sobre la gráfica para desplazar el plano. Modifica los parámetros y observa
+          pendiente, curvatura, cortes y tendencia. Útil para interpretar datos v/t o s/t.
+        </p>
+      </aside>
+
+      <section class="card canvas-wrap">
+        <canvas id="canvas" aria-label="Plano cartesiano con función representada"></canvas>
+      </section>
+    </section>
+  </main>
+
+  <script>
+    "use strict";
+
+    /*
+      Registro de Service Worker inline mediante Blob.
+      Cachea el propio index.html y permite reapertura offline tras la primera carga.
+      Requiere contexto seguro: https:// o localhost.
+    */
+    if ("serviceWorker" in navigator) {
+      const swCode = `
+        const CACHE = "graficas-xy-v1";
+        self.addEventListener("install", event => {
+          event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(["./"])));
+          self.skipWaiting();
+        });
+        self.addEventListener("activate", event => {
+          event.waitUntil(self.clients.claim());
+        });
+        self.addEventListener("fetch", event => {
+          event.respondWith(
+            caches.match(event.request).then(cached => {
+              return cached || fetch(event.request).then(response => {
+                const copy = response.clone();
+                caches.open(CACHE).then(cache => cache.put(event.request, copy));
+                return response;
+              }).catch(() => caches.match("./"));
+            })
+          );
+        });
+      `;
+      const swBlob = new Blob([swCode], { type: "text/javascript" });
+      const swURL = URL.createObjectURL(swBlob);
+      navigator.serviceWorker.register(swURL).catch(console.warn);
+    }
+
+    const canvas = document.getElementById("canvas");
+    const ctx = canvas.getContext("2d");
+
+    const els = {
+      type: document.getElementById("type"),
+      m: document.getElementById("m"),
+      b: document.getElementById("b"),
+      a: document.getElementById("a"),
+      zoom: document.getElementById("zoom"),
+      mVal: document.getElementById("mVal"),
+      bVal: document.getElementById("bVal"),
+      aVal: document.getElementById("aVal"),
+      zoomVal: document.getElementById("zoomVal"),
+      aGroup: document.getElementById("aGroup"),
+      formula: document.getElementById("formula"),
+      reset: document.getElementById("reset")
+    };
+
+    const state = {
+      scale: Number(els.zoom.value),
+      offsetX: 0,
+      offsetY: 0,
+      dragging: false,
+      lastX: 0,
+      lastY: 0
+    };
+
+    function resizeCanvas() {
+      const dpr = window.devicePixelRatio || 1;
+      const rect = canvas.getBoundingClientRect();
+      canvas.width = Math.round(rect.width * dpr);
+      canvas.height = Math.round(rect.height * dpr);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      draw();
+    }
+
+    function getParams() {
+      return {
+        type: els.type.value,
+        m: Number(els.m.value),
+        b: Number(els.b.value),
+        a: Number(els.a.value),
+        scale: Number(els.zoom.value)
+      };
+    }
+
+    function f(x) {
+      const { type, m, b, a } = getParams();
+      return type === "linear" ? m * x + b : a * x * x + m * x + b;
+    }
+
+    function worldToScreen(x, y) {
+      const rect = canvas.getBoundingClientRect();
+      return {
+        x: rect.width / 2 + state.offsetX + x * state.scale,
+        y: rect.height / 2 + state.offsetY - y * state.scale
+      };
+    }
+
+    function screenToWorld(px, py) {
+      const rect = canvas.getBoundingClientRect();
+      return {
+        x: (px - rect.width / 2 - state.offsetX) / state.scale,
+        y: -(py - rect.height / 2 - state.offsetY) / state.scale
+      };
+    }
+
+    function drawGrid() {
+      const rect = canvas.getBoundingClientRect();
+      const w = rect.width;
+      const h = rect.height;
+      const step = state.scale;
+      const origin = worldToScreen(0, 0);
+
+      ctx.clearRect(0, 0, w, h);
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, w, h);
+
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = "#e2e8f0";
+      ctx.beginPath();
+
+      for (let x = origin.x % step; x <= w; x += step) {
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, h);
+      }
+
+      for (let y = origin.y % step; y <= h; y += step) {
+        ctx.moveTo(0, y);
+        ctx.lineTo(w, y);
+      }
+
+      ctx.stroke();
+
+      ctx.strokeStyle = "#0f172a";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(0, origin.y);
+      ctx.lineTo(w, origin.y);
+      ctx.moveTo(origin.x, 0);
+      ctx.lineTo(origin.x, h);
+      ctx.stroke();
+
+      ctx.fillStyle = "#64748b";
+      ctx.font = "12px system-ui";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "top";
+
+      for (let i = -20; i <= 20; i++) {
+        const p = worldToScreen(i, 0);
+        if (p.x > 12 && p.x < w - 12 && i !== 0) {
+          ctx.fillText(String(i), p.x, origin.y + 6);
+        }
+      }
+
+      ctx.textAlign = "left";
+      ctx.textBaseline = "middle";
+      for (let i = -20; i <= 20; i++) {
+        const p = worldToScreen(0, i);
+        if (p.y > 12 && p.y < h - 12 && i !== 0) {
+          ctx.fillText(String(i), origin.x + 6, p.y);
+        }
+      }
+
+      ctx.fillStyle = "#0f172a";
+      ctx.fillText("x", w - 18, origin.y - 12);
+      ctx.fillText("y", origin.x + 8, 16);
+    }
+
+    function drawFunction() {
+      const rect = canvas.getBoundingClientRect();
+      const w = rect.width;
+
+      ctx.strokeStyle = "#1d4ed8";
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+
+      let started = false;
+
+      for (let px = 0; px <= w; px += 2) {
+        const world = screenToWorld(px, 0);
+        const y = f(world.x);
+        const p = worldToScreen(world.x, y);
+
+        if (!Number.isFinite(p.y) || Math.abs(p.y) > 100000) {
+          started = false;
+          continue;
+        }
+
+        if (!started) {
+          ctx.moveTo(p.x, p.y);
+          started = true;
+        } else {
+          ctx.lineTo(p.x, p.y);
+        }
+      }
+
+      ctx.stroke();
+    }
+
+    function drawSamplePoint() {
+      const x = 2;
+      const y = f(x);
+      const p = worldToScreen(x, y);
+
+      ctx.fillStyle = "#dc2626";
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 5, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = "#0f172a";
+      ctx.font = "13px system-ui";
+      ctx.fillText(`P(${x.toFixed(1)}, ${y.toFixed(2)})`, p.x + 8, p.y - 12);
+    }
+
+    function updateUI() {
+      const { type, m, b, a, scale } = getParams();
+
+      els.mVal.textContent = m.toFixed(1);
+      els.bVal.textContent = b.toFixed(1);
+      els.aVal.textContent = a.toFixed(2);
+      els.zoomVal.textContent = `${scale} px/u`;
+      els.aGroup.style.display = type === "quadratic" ? "grid" : "none";
+
+      els.formula.textContent = type === "linear"
+        ? `Modelo: y = ${m.toFixed(1)}·x ${b >= 0 ? "+" : "-"} ${Math.abs(b).toFixed(1)}`
+        : `Modelo: y = ${a.toFixed(2)}·x² ${m >= 0 ? "+" : "-"} ${Math.abs(m).toFixed(1)}·x ${b >= 0 ? "+" : "-"} ${Math.abs(b).toFixed(1)}`;
+    }
+
+    function draw() {
+      state.scale = Number(els.zoom.value);
+      updateUI();
+      drawGrid();
+      drawFunction();
+      drawSamplePoint();
+    }
+
+    function pointerPos(event) {
+      const rect = canvas.getBoundingClientRect();
+      return {
+        x: event.clientX - rect.left,
+        y: event.clientY - rect.top
+      };
+    }
+
+    canvas.addEventListener("pointerdown", event => {
+      canvas.setPointerCapture(event.pointerId);
+      const p = pointerPos(event);
+      state.dragging = true;
+      state.lastX = p.x;
+      state.lastY = p.y;
+    });
+
+    canvas.addEventListener("pointermove", event => {
+      if (!state.dragging) return;
+      const p = pointerPos(event);
+      state.offsetX += p.x - state.lastX;
+      state.offsetY += p.y - state.lastY;
+      state.lastX = p.x;
+      state.lastY = p.y;
+      draw();
+    });
+
+    canvas.addEventListener("pointerup", () => {
+      state.dragging = false;
+    });
+
+    Object.values(els).forEach(el => {
+      if (el && (el.tagName === "INPUT" || el.tagName === "SELECT")) {
+        el.addEventListener("input", draw);
+      }
+    });
+
+    els.reset.addEventListener("click", () => {
+      state.offsetX = 0;
+      state.offsetY = 0;
+      els.zoom.value = 42;
+      draw();
+    });
+
+    window.addEventListener("resize", resizeCanvas);
+    resizeCanvas();
+  </script>
+</body>
+</html>
